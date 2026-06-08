@@ -5,7 +5,7 @@ import easyocr
 import numpy as np
 from molmass import Formula
 
-
+numbers = []
 @st.cache_resource
 def load_reader():
     return easyocr.Reader(["en"])
@@ -44,7 +44,7 @@ if uploaded_file is not None:
 
     st.subheader("Detected Numbers")
     st.write(numbers)
-numbers = []
+
 mz_values = []
 for n in numbers:
     try:
