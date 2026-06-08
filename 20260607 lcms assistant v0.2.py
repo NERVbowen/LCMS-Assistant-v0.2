@@ -44,7 +44,7 @@ if uploaded_file is not None:
 
     st.subheader("Detected Numbers")
     st.write(numbers)
-
+numbers = []
 mz_values = []
 for n in numbers:
     try:
