@@ -45,6 +45,45 @@ if uploaded_file is not None:
     st.subheader("Detected Numbers")
     st.write(numbers)
 
+mz_values = []
+for n in numbers:
+    try:
+        mz_values.append(float(n))
+    except:
+        pass
+
+target_diffs = [1, 18, 23, 35, 39, 44, 59]
+
+matches = []
+
+for i in range(len(mz_values)):
+    for j in range(i + 1, len(mz_values)):
+
+        diff = abs(mz_values[j] - mz_values[i])
+
+        for target in target_diffs:
+
+            if round(diff) == target:
+
+                matches.append(
+                    (
+                        mz_values[i],
+                        mz_values[j],
+                        round(diff, 4),
+                        target
+                    )
+                )
+
+st.subheader("Potential Relationships")
+if matches:
+    for m1, m2, diff, target in matches:
+
+        st.write(
+            f"{m1:.4f} ↔ {m2:.4f} | Δ={diff:.4f} | Match={target}"
+        )
+else:
+    st.write("No matches found")
+
 
 
 st.title("MS Calculator")
@@ -66,7 +105,6 @@ if formula:
 
         st.write(f"[M-H]- = {mw - 1.00783:.5f}")
         st.write(f"[M+Cl]- = {mw + 34.96885:.5f}")
-        st.write(f"[M+FA-H]- = {mw + 44.99820:.5f}")
         st.write(f"[M+Ac-H]- = {mw + 59.01385:.5f}")
 
     except Exception as e:
