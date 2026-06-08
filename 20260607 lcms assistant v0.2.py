@@ -4,16 +4,32 @@ from PIL import Image
 import easyocr
 import numpy as np
 
-st.title("MS Calculator")
 
 st.title("Number Reader from Image")
-reader = easyocr.Reader(['en'])
+uploaded_file = st.file_uploader(
+    "Upload image",
+    type=["png", "jpg", "jpeg"]
+)
+
+if uploaded_file is not None:
+
+    image = Image.open(uploaded_file)
+
+    reader = easyocr.Reader(['en'])
+
+    result = reader.readtext(np.array(image))
+
+    for item in result:
+        st.write(item[1])reader = easyocr.Reader(['en'])
 
 result = reader.readtext(np.array(image))
 
 for item in result:
     st.write(item[1])
 
+
+
+st.title("MS Calculator")
 formula = st.text_input("Molecular Formula", "C8H10N4O2")
 
 if formula:
