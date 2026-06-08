@@ -2,7 +2,7 @@ import re
 import streamlit as st
 from PIL import Image, ImageEnhance
 import easyocr
-import numpy as 
+import numpy as np
 from molmass import Formula
 
 
