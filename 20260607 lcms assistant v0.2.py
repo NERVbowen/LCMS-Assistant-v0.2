@@ -2,7 +2,8 @@ import re
 import streamlit as st
 from PIL import Image, ImageEnhance
 import easyocr
-import numpy as np
+import numpy as 
+from molmass import Formula
 
 
 @st.cache_resource
