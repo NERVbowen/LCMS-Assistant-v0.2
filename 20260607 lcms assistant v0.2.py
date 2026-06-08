@@ -12,7 +12,7 @@ def load_reader():
 
 reader = load_reader()
 
-st.title("Number Reader from Image")
+st.title("Load your Mass Spectra Here")
 
 uploaded_file = st.file_uploader(
     "Upload image",
