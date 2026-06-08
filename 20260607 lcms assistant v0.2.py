@@ -1,8 +1,9 @@
+import re
 import streamlit as st
-from molmass import Formula
-from PIL import Image
+from PIL import Image, ImageEnhance
 import easyocr
 import numpy as np
+
 
 @st.cache_resource
 def load_reader():
