@@ -6,6 +6,7 @@ import numpy as np
 
 
 st.title("Number Reader from Image")
+
 uploaded_file = st.file_uploader(
     "Upload image",
     type=["png", "jpg", "jpeg"]
@@ -15,17 +16,16 @@ if uploaded_file is not None:
 
     image = Image.open(uploaded_file)
 
+    st.image(image)
+
     reader = easyocr.Reader(['en'])
 
     result = reader.readtext(np.array(image))
 
+    st.subheader("Recognized Text")
+
     for item in result:
-        st.write(item[1])reader = easyocr.Reader(['en'])
-
-result = reader.readtext(np.array(image))
-
-for item in result:
-    st.write(item[1])
+        st.write(item[1])
 
 
 
