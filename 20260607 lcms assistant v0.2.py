@@ -114,5 +114,5 @@ if formula:
 st.divider()
 
 st.caption(
-    "LCMS Assistant v0.1 | Developed by Bowen Wang"
+    "LCMS Assistant v0.2 | Developed by Bowen Wang"
 )
