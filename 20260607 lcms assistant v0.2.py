@@ -2,6 +2,7 @@ import streamlit as st
 from molmass import Formula
 from PIL import Image
 import easyocr
+import numpy as np
 
 st.title("MS Calculator")
 
