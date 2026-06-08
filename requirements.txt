@@ -1,4 +1,5 @@
 streamlit
 molmass
 pillow
-pytesseract
+easyocr
+opencv-python-headless
