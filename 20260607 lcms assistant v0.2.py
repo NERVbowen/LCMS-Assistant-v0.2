@@ -4,6 +4,11 @@ from PIL import Image
 import easyocr
 import numpy as np
 
+@st.cache_resource
+def load_reader():
+    return easyocr.Reader(["en"])
+
+reader = load_reader()
 
 st.title("Number Reader from Image")
 
@@ -13,19 +18,30 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is not None:
+    image = Image.open(uploaded_file).convert("L")  # grayscale
 
-    image = Image.open(uploaded_file)
+    # enlarge image
+    image = image.resize(
+        (image.width * 2, image.height * 2)
+    )
 
-    st.image(image)
+    # increase contrast
+    enhancer = ImageEnhance.Contrast(image)
+    image = enhancer.enhance(2.0)
 
-    reader = easyocr.Reader(['en'])
+    st.image(image, caption="Processed image")
 
-    result = reader.readtext(np.array(image))
+    result = reader.readtext(np.array(image), detail=0)
 
-    st.subheader("Recognized Text")
+    st.subheader("Raw OCR Text")
+    st.write(result)
 
-    for item in result:
-        st.write(item[1])
+    all_text = " ".join(result)
+
+    numbers = re.findall(r"\d+\.\d+|\d+", all_text)
+
+    st.subheader("Detected Numbers")
+    st.write(numbers)
 
 
 
