@@ -1,0 +1,6 @@
+streamlit
+molmass
+pillow
+numpy==1.26.4
+easyocr==1.7.1
+opencv-python-headless==4.9.0.80
