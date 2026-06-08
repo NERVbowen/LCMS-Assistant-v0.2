@@ -1,28 +1,17 @@
 import streamlit as st
 from molmass import Formula
 from PIL import Image
-import pytesseract
+import easyocr
 
 st.title("MS Calculator")
 
-
-
 st.title("Number Reader from Image")
+reader = easyocr.Reader(['en'])
 
-uploaded_file = st.file_uploader(
-    "Upload or drag an image",
-    type=["png", "jpg", "jpeg"]
-)
+result = reader.readtext(np.array(image))
 
-if uploaded_file is not None:
-    image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded image")
-
-    text = pytesseract.image_to_string(image)
-
-    st.subheader("Recognized text")
-    st.write(text)
-
+for item in result:
+    st.write(item[1])
 
 formula = st.text_input("Molecular Formula", "C8H10N4O2")
 
