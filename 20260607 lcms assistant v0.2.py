@@ -52,7 +52,7 @@ for n in numbers:
     except:
         pass
 
-target_diffs = [1, 18, 23, 35, 39, 44, 59]
+target_diffs = [17, 22, 36, 38]
 
 matches = []
 
