@@ -7,7 +7,7 @@ from molmass import Formula
 from rdkit import Chem
 from rdkit.Chem import Descriptors, rdMolDescriptors
 
-st.title("LCMS Assistant v0.2")
+st.title("LCMS Assistant v0.3")
 
 @st.cache_resource
 def load_reader():
