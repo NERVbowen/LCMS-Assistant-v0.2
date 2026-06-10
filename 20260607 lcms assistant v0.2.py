@@ -353,4 +353,4 @@ with tab4:
             st.info(result["Note"])
 
 
-st.caption("LCMS Assistant v0.2 | Developed by Bowen Wang")
+st.caption("LCMS Assistant v0.3 | Developed by Bowen Wang")
