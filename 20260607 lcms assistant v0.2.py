@@ -5,7 +5,7 @@ import easyocr
 import numpy as np
 from molmass import Formula
 from rdkit import Chem
-from rdkit.Chem import Descriptors, rdMolDescriptors, Draw
+from rdkit.Chem import Descriptors, rdMolDescriptors
 
 st.title("LCMS Assistant v0.2")
 
@@ -18,6 +18,7 @@ reader = load_reader()
 
 def uv_estimator(smiles):
     try:
+
         mol = Chem.MolFromSmiles(smiles)
 
         if mol is None:
@@ -297,18 +298,26 @@ with tab4:
             mol = Chem.MolFromSmiles(smiles)
 
             if mol is not None:
-                st.subheader("Chemical Structure")
+                try:
+                    from rdkit.Chem import Draw
 
-                img = Draw.MolToImage(
-                    mol,
-                    size=(300, 220)
-                )
+                    st.subheader("Chemical Structure")
 
-                st.image(
-                    img,
-                    caption="Structure from SMILES",
-                    width=300
-                )
+                    img = Draw.MolToImage(
+                        mol,
+                        size=(300, 220)
+                    )
+
+                    st.image(
+                        img,
+                        caption="Structure from SMILES",
+                        width=300
+                    )
+
+                except Exception:
+                    st.warning(
+                        "Structure image could not be displayed, but UV estimation is still available."
+                    )
 
             st.subheader("Molecular Information")
 
