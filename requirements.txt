@@ -3,3 +3,5 @@ molmass
 pillow
 easyocr
 opencv-python-headless
+numpy
+rdkit
