@@ -297,27 +297,27 @@ with tab4:
         else:
             mol = Chem.MolFromSmiles(smiles)
 
-            if mol is not None:
-                try:
-                    from rdkit.Chem import Draw
+            # if mol is not None:
+            #     try:
+            #         from rdkit.Chem import Draw
 
-                    st.subheader("Chemical Structure")
+            #         st.subheader("Chemical Structure")
 
-                    img = Draw.MolToImage(
-                        mol,
-                        size=(300, 220)
-                    )
+            #         img = Draw.MolToImage(
+            #             mol,
+            #             size=(300, 220)
+            #         )
 
-                    st.image(
-                        img,
-                        caption="Structure from SMILES",
-                        width=300
-                    )
+            #         st.image(
+            #             img,
+            #             caption="Structure from SMILES",
+            #             width=300
+            #         )
 
-                except Exception:
-                    st.warning(
-                        "Structure image could not be displayed, but UV estimation is still available."
-                    )
+            #     except Exception:
+            #         st.warning(
+            #             "Structure image could not be displayed, but UV estimation is still available."
+            #         )
 
             st.subheader("Molecular Information")
 
