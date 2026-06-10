@@ -3,3 +3,4 @@ molmass
 pillow
 easyocr
 opencv-python-headless
+rdkit
