@@ -6,8 +6,12 @@ import numpy as np
 from molmass import Formula
 from rdkit import Chem
 from rdkit.Chem import Descriptors, rdMolDescriptors
+from rdkit.Chem import Crippen, Lipinski
 
-st.title("LCMS Assistant v0.3")
+st.title("LCMS Assistant v0.4")
+
+
+
 
 @st.cache_resource
 def load_reader():
@@ -155,11 +159,123 @@ def uv_estimator(smiles):
         }
 
 
-tab1, tab2, tab3, tab4 = st.tabs([
+def smiles_lcms_ion_predictor(smiles, mobile_phase):
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+
+        if mol is None:
+            return {"error": "Invalid SMILES string. Please check the structure."}
+
+        formula = rdMolDescriptors.CalcMolFormula(mol)
+        mw = Descriptors.MolWt(mol)
+        logp = Crippen.MolLogP(mol)
+        tpsa = rdMolDescriptors.CalcTPSA(mol)
+
+        hbd = Lipinski.NumHDonors(mol)
+        hba = Lipinski.NumHAcceptors(mol)
+        rot_bonds = Lipinski.NumRotatableBonds(mol)
+        heavy_atoms = mol.GetNumHeavyAtoms()
+
+        n_atoms = sum(1 for atom in mol.GetAtoms() if atom.GetSymbol() == "N")
+        o_atoms = sum(1 for atom in mol.GetAtoms() if atom.GetSymbol() == "O")
+
+        has_basic_n = mol.HasSubstructMatch(Chem.MolFromSmarts("[NX3;H2,H1,H0;!$(NC=O)]"))
+        has_carboxylic_acid = mol.HasSubstructMatch(Chem.MolFromSmarts("C(=O)[OX2H1]"))
+        has_sulfonic_acid = mol.HasSubstructMatch(Chem.MolFromSmarts("S(=O)(=O)[OX2H1]"))
+        has_phenol = mol.HasSubstructMatch(Chem.MolFromSmarts("c[OX2H1]"))
+        has_ether = mol.HasSubstructMatch(Chem.MolFromSmarts("[OD2]([#6])[#6]"))
+        has_carbonyl = mol.HasSubstructMatch(Chem.MolFromSmarts("[CX3]=[OX1]"))
+
+        mh_score = 1
+        mnh4_score = 1
+        mna_score = 1
+        mh_neg_score = 1
+
+        # [M+H]+
+        if has_basic_n:
+            mh_score += 3
+        if n_atoms >= 1:
+            mh_score += 1
+        if hba >= 2:
+            mh_score += 1
+
+        # [M+NH4]+
+        if o_atoms >= 2:
+            mnh4_score += 2
+        if has_ether:
+            mnh4_score += 2
+        if has_carbonyl:
+            mnh4_score += 1
+        if hba >= 3:
+            mnh4_score += 1
+
+        # [M+Na]+
+        if o_atoms >= 2:
+            mna_score += 2
+        if hba >= 3:
+            mna_score += 1
+        if has_ether:
+            mna_score += 2
+        if has_carbonyl:
+            mna_score += 1
+        if mw > 500:
+            mna_score += 1
+
+        # [M-H]-
+        if has_carboxylic_acid:
+            mh_neg_score += 4
+        if has_sulfonic_acid:
+            mh_neg_score += 4
+        if has_phenol:
+            mh_neg_score += 2
+        if hbd >= 2:
+            mh_neg_score += 1
+
+        # Mobile phase effect
+        if mobile_phase == "Formic Acid":
+            mh_score += 1
+        elif mobile_phase == "Acetic Acid":
+            mh_score += 1
+        elif mobile_phase == "Ammonium Formate":
+            mnh4_score += 2
+        elif mobile_phase == "Ammonium Acetate":
+            mnh4_score += 3
+        elif mobile_phase == "Sodium Acetate":
+            mna_score += 3
+
+        mh_score = max(0, min(5, mh_score))
+        mnh4_score = max(0, min(5, mnh4_score))
+        mna_score = max(0, min(5, mna_score))
+        mh_neg_score = max(0, min(5, mh_neg_score))
+
+        def stars(score):
+            return "★" * score + "☆" * (5 - score)
+
+        return {
+            "Formula": formula,
+            "MW": round(mw, 2),
+            "LogP": round(logp, 2),
+            "TPSA": round(tpsa, 2),
+            "HBD": hbd,
+            "HBA": hba,
+            "Rotatable Bonds": rot_bonds,
+            "Heavy Atoms": heavy_atoms,
+            "[M+H]+": stars(mh_score),
+            "[M+NH4]+": stars(mnh4_score),
+            "[M+Na]+": stars(mna_score),
+            "[M-H]-": stars(mh_neg_score),
+        }
+
+    except Exception as e:
+        return {"error": f"Could not process SMILES: {str(e)}"}
+
+
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Mass Spectra OCR",
     "Formula Calculator",
     "Mass Calculator",
-    "UV Estimator"
+    "UV Estimator",
+    "LC-MS Ion Estimator"
 ])
 
 with tab1:
@@ -353,4 +469,55 @@ with tab4:
             st.info(result["Note"])
 
 
-st.caption("LCMS Assistant v0.3 | Developed by Bowen Wang")
+with tab5:
+    st.header("SMILES-Based LC-MS Ionization Estimator")
+
+    smiles = st.text_input(
+        "Enter SMILES",
+        value="CCOCCOCCO",
+        key="lcms_ion_smiles"
+    )
+
+    mobile_phase = st.selectbox(
+        "Mobile Phase Additive",
+        [
+            "Formic Acid",
+            "Acetic Acid",
+            "Ammonium Formate",
+            "Ammonium Acetate",
+            "Sodium Acetate"
+        ],
+        key="mobile_phase"
+    )
+
+    if smiles:
+        result = smiles_lcms_ion_predictor(smiles, mobile_phase)
+
+        if "error" in result:
+            st.error(result["error"])
+        else:
+            st.subheader("Molecular Properties")
+
+            st.write(f"**Formula:** {result['Formula']}")
+            st.write(f"**MW:** {result['MW']}")
+            st.write(f"**LogP:** {result['LogP']}")
+            st.write(f"**TPSA:** {result['TPSA']} Å²")
+            st.write(f"**HBD:** {result['HBD']}")
+            st.write(f"**HBA:** {result['HBA']}")
+            st.write(f"**Rotatable Bonds:** {result['Rotatable Bonds']}")
+            st.write(f"**Heavy Atoms:** {result['Heavy Atoms']}")
+
+            st.subheader("Likely LC-MS Ions")
+
+            st.write(f"**Mobile phase:** {mobile_phase}")
+            st.write(f"**[M+H]+:** {result['[M+H]+']}")
+            st.write(f"**[M+NH4]+:** {result['[M+NH4]+']}")
+            st.write(f"**[M+Na]+:** {result['[M+Na]+']}")
+            st.write(f"**[M-H]-:** {result['[M-H]-']}")
+
+            st.caption(
+                "Rule-based estimate only. Actual ionization depends on source settings, concentration, solvent, salts, matrix, and instrument conditions."
+            )
+
+
+st.caption("LCMS Assistant v0.4 | Developed by Bowen Wang")
