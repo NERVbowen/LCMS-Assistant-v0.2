@@ -1,5 +1,6 @@
 streamlit
 molmass
-pillow
 easyocr
-opencv-python-headless
+numpy
+pillow
+rdkit-pypi==2022.9.5
