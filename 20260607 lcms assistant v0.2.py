@@ -155,7 +155,6 @@ def uv_estimator(smiles):
             "error": f"Could not process this SMILES. Error: {str(e)}"
         }
 
-
 def smiles_lcms_ion_predictor(smiles, mobile_phase):
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -248,15 +247,66 @@ def smiles_lcms_ion_predictor(smiles, mobile_phase):
         def stars(score):
             return "★" * score + "☆" * (5 - score)
 
+        # Interpretations
+        if logp < 1:
+            logp_note = "Hydrophilic / very polar; may have weak retention on reverse-phase LC."
+        elif logp < 3:
+            logp_note = "Moderately polar; often suitable for reverse-phase LC."
+        elif logp < 5:
+            logp_note = "Lipophilic; likely retained on reverse-phase LC."
+        else:
+            logp_note = "Highly lipophilic; may show strong reverse-phase retention and lower water solubility."
+
+        if tpsa < 60:
+            tpsa_note = "Low polarity; often better retained on reverse-phase LC."
+        elif tpsa < 120:
+            tpsa_note = "Moderate polarity."
+        else:
+            tpsa_note = "High polarity; may elute early in reverse-phase LC."
+
+        if hbd == 0:
+            hbd_note = "No hydrogen-bond donor groups."
+        elif hbd <= 2:
+            hbd_note = "Few hydrogen-bond donor groups such as OH or NH."
+        else:
+            hbd_note = "Multiple hydrogen-bond donor groups."
+
+        if hba <= 2:
+            hba_note = "Limited hydrogen-bond accepting ability."
+        elif hba <= 6:
+            hba_note = "Moderate hydrogen-bond accepting ability."
+        else:
+            hba_note = "Strong hydrogen-bond accepting ability; may favor adduct formation."
+
+        if rot_bonds <= 5:
+            rot_note = "Relatively rigid structure."
+        elif rot_bonds <= 10:
+            rot_note = "Moderately flexible molecule."
+        else:
+            rot_note = "Highly flexible molecule; common for oligomers, surfactants, or long-chain additives."
+
+        if heavy_atoms <= 10:
+            heavy_note = "Small molecule."
+        elif heavy_atoms <= 30:
+            heavy_note = "Medium-sized molecule."
+        else:
+            heavy_note = "Large molecule."
+
         return {
             "Formula": formula,
             "MW": round(mw, 2),
             "LogP": round(logp, 2),
+            "LogP Interpretation": logp_note,
             "TPSA": round(tpsa, 2),
+            "TPSA Interpretation": tpsa_note,
             "HBD": hbd,
+            "HBD Interpretation": hbd_note,
             "HBA": hba,
+            "HBA Interpretation": hba_note,
             "Rotatable Bonds": rot_bonds,
+            "Rotatable Bonds Interpretation": rot_note,
             "Heavy Atoms": heavy_atoms,
+            "Heavy Atoms Interpretation": heavy_note,
             "[M+H]+": stars(mh_score),
             "[M+NH4]+": stars(mnh4_score),
             "[M+Na]+": stars(mna_score),
@@ -469,6 +519,11 @@ with tab4:
 with tab5:
     st.header("SMILES-Based LC-MS Ionization Estimator")
 
+    st.caption(
+        "Rule-based estimate of molecular properties and common LC-MS ions from SMILES. "
+        "This is a screening tool, not an exact ionization prediction."
+    )
+
     smiles = st.text_input(
         "Enter SMILES",
         value="CCOCCOCCO",
@@ -492,17 +547,29 @@ with tab5:
 
         if "error" in result:
             st.error(result["error"])
+
         else:
             st.subheader("Molecular Properties")
 
             st.write(f"**Formula:** {result['Formula']}")
             st.write(f"**MW:** {result['MW']}")
-            st.write(f"**LogP:** {result['LogP']}")
+            st.write(f"**Estimated LogP (RDKit Crippen):** {result['LogP']}")
+            st.caption(result["LogP Interpretation"])
+
             st.write(f"**TPSA:** {result['TPSA']} Å²")
+            st.caption(result["TPSA Interpretation"])
+
             st.write(f"**HBD:** {result['HBD']}")
+            st.caption(result["HBD Interpretation"])
+
             st.write(f"**HBA:** {result['HBA']}")
+            st.caption(result["HBA Interpretation"])
+
             st.write(f"**Rotatable Bonds:** {result['Rotatable Bonds']}")
+            st.caption(result["Rotatable Bonds Interpretation"])
+
             st.write(f"**Heavy Atoms:** {result['Heavy Atoms']}")
+            st.caption(result["Heavy Atoms Interpretation"])
 
             st.subheader("Likely LC-MS Ions")
 
@@ -513,7 +580,7 @@ with tab5:
             st.write(f"**[M-H]-:** {result['[M-H]-']}")
 
             st.caption(
-                "Rule-based estimate only. Actual ionization depends on source settings, concentration, solvent, salts, matrix, and instrument conditions."
+                "Ion likelihood is rule-based. Actual results depend on source conditions, salt level, solvent, concentration, matrix, and instrument settings."
             )
 
 
