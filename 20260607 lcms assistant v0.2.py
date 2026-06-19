@@ -1,16 +1,36 @@
 import re
 import streamlit as st
+from streamlit.components.v1 import html
 from PIL import Image, ImageEnhance
 import easyocr
 import numpy as np
 from molmass import Formula
+
 from rdkit import Chem
-from rdkit.Chem import Descriptors, rdMolDescriptors
-from rdkit.Chem import Crippen, Lipinski
-from rdkit import Chem
-from rdkit.Chem import Draw
-from rdkit.Chem import Descriptors
-from rdkit.Chem import rdMolDescriptors
+from rdkit.Chem import (
+    Descriptors,
+    rdMolDescriptors,
+    Crippen,
+    Lipinski
+)
+
+
+st.set_page_config(
+    page_title="LCMS Assistant",
+    page_icon="🧪",
+    layout="wide"
+)
+
+html("""
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2SFYEGXTZP"></script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-2SFYEGXTZP');
+</script>
+""", height=0)
+
 
 st.title("LCMS Assistant v0.5")
 
@@ -595,7 +615,7 @@ with tab6:
     import streamlit as st
     from streamlit_ketcher import st_ketcher
     from rdkit import Chem
-    from rdkit.Chem import Draw, Descriptors, rdMolDescriptors
+    from rdkit.Chem import Descriptors, rdMolDescriptors
 
     st.title("ChemDraw Lite")
 
@@ -618,9 +638,6 @@ with tab6:
         mol = Chem.MolFromSmiles(smiles)
 
         if mol:
-            st.image(
-                Draw.MolToImage(mol, size=(500, 350))
-            )
 
             st.write(
                 "Formula:",
