@@ -8,9 +8,6 @@ from rdkit import Chem
 from rdkit.Chem import Descriptors, rdMolDescriptors
 from rdkit.Chem import Crippen, Lipinski
 from rdkit import Chem
-from rdkit.Chem import Draw
-from rdkit.Chem import Descriptors
-from rdkit.Chem import rdMolDescriptors
 
 st.title("LCMS Assistant v0.5")
 
@@ -595,7 +592,7 @@ with tab6:
     import streamlit as st
     from streamlit_ketcher import st_ketcher
     from rdkit import Chem
-    from rdkit.Chem import Draw, Descriptors, rdMolDescriptors
+    from rdkit.Chem import Descriptors, rdMolDescriptors
 
     st.title("ChemDraw Lite")
 
@@ -607,34 +604,66 @@ with tab6:
     )
 
     if input_smiles:
-        smiles = input_smiles
+        smiles = input_smiles.strip()
     else:
-        smiles = st_ketcher("CN1C=NC2=C1C(=O)N(C(=O)N2C)C")
+        smiles = st_ketcher(
+            "CN1C=NC2=C1C(=O)N(C(=O)N2C)C"
+        )  # caffeine
 
     st.write("SMILES:")
     st.code(smiles)
 
     if smiles:
+
         mol = Chem.MolFromSmiles(smiles)
 
         if mol:
-            st.image(
-                Draw.MolToImage(mol, size=(500, 350))
-            )
 
-            st.write(
-                "Formula:",
-                rdMolDescriptors.CalcMolFormula(mol)
-            )
+            formula = rdMolDescriptors.CalcMolFormula(mol)
+            mw = round(Descriptors.MolWt(mol), 4)
+            exact_mass = round(Descriptors.ExactMolWt(mol), 4)
 
-            st.write(
-                "MW:",
-                round(Descriptors.MolWt(mol), 4)
-            )
+            st.subheader("Properties")
 
-            st.write(
-                "Exact Mass:",
-                round(Descriptors.ExactMolWt(mol), 4)
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                st.metric("Formula", formula)
+
+            with col2:
+                st.metric("MW", mw)
+
+            with col3:
+                st.metric("Exact Mass", exact_mass)
+
+            st.subheader("Common Adducts")
+
+            adduct_table = {
+                "Ion": [
+                    "[M+H]+",
+                    "[M+Na]+",
+                    "[M+NH4]+",
+                    "[M+K]+",
+                    "[M-H]-",
+                    "[M+Cl]-",
+                    "[M+FA-H]-",
+                    "[M+Ac-H]-"
+                ],
+                "m/z": [
+                    round(exact_mass + 1.007276, 4),
+                    round(exact_mass + 22.989218, 4),
+                    round(exact_mass + 18.033823, 4),
+                    round(exact_mass + 38.963158, 4),
+                    round(exact_mass - 1.007276, 4),
+                    round(exact_mass + 34.969402, 4),
+                    round(exact_mass + 44.998201, 4),  # Formate
+                    round(exact_mass + 59.013851, 4)  # Acetate
+                ]
+            }
+
+            st.dataframe(
+                adduct_table,
+                use_container_width=True
             )
 
         else:
