@@ -4,3 +4,4 @@ easyocr
 numpy
 pillow
 rdkit-pypi==2022.9.5
+streamlit-ketcher
