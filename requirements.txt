@@ -3,5 +3,5 @@ molmass
 easyocr
 numpy
 pillow
-rdkit-pypi==2022.9.5
+rdkit==2024.9.6
 streamlit-ketcher
