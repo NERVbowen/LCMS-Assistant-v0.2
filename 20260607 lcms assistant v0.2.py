@@ -7,8 +7,12 @@ from molmass import Formula
 from rdkit import Chem
 from rdkit.Chem import Descriptors, rdMolDescriptors
 from rdkit.Chem import Crippen, Lipinski
+from rdkit import Chem
+from rdkit.Chem import Draw
+from rdkit.Chem import Descriptors
+from rdkit.Chem import rdMolDescriptors
 
-st.title("LCMS Assistant v0.4")
+st.title("LCMS Assistant v0.5")
 
 
 
@@ -320,12 +324,13 @@ def smiles_lcms_ion_predictor(smiles, mobile_phase):
         return {"error": f"Could not process SMILES: {str(e)}"}
 
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6  = st.tabs([
     "Mass Spectra OCR",
     "Formula Calculator",
     "Mass Calculator",
     "UV Estimator",
-    "LC-MS Ion Estimator"
+    "LC-MS Ion Estimator",
+    "Simple ChemDraw"
 ])
 
 with tab1:
@@ -450,7 +455,7 @@ with tab4:
 
     smiles = st.text_input(
         "Enter SMILES",
-        value="C1=CC=C2C(=C1)C=CC3=C2C4=CC=CC=C4C=C3",
+        value="CN1C=NC2=C1C(=O)N(C(=O)N2C)C",
         key="uv_smiles"
     )
 
@@ -529,7 +534,7 @@ with tab5:
 
     smiles = st.text_input(
         "Enter SMILES",
-        value="CCOCCOCCO",
+        value="CN1C=NC2=C1C(=O)N(C(=O)N2C)C",
         key="lcms_ion_smiles"
     )
 
@@ -586,5 +591,53 @@ with tab5:
                 "Ion likelihood is rule-based. Actual results depend on source conditions, salt level, solvent, concentration, matrix, and instrument settings."
             )
 
+with tab6:
+    import streamlit as st
+    from streamlit_ketcher import st_ketcher
+    from rdkit import Chem
+    from rdkit.Chem import Draw, Descriptors, rdMolDescriptors
 
-st.caption("LCMS Assistant v0.4 | Developed by Bowen Wang")
+    st.title("ChemDraw Lite")
+
+    st.subheader("Import SMILES")
+
+    input_smiles = st.text_input(
+        "Paste SMILES",
+        value=""
+    )
+
+    if input_smiles:
+        smiles = input_smiles
+    else:
+        smiles = st_ketcher("CN1C=NC2=C1C(=O)N(C(=O)N2C)C")
+
+    st.write("SMILES:")
+    st.code(smiles)
+
+    if smiles:
+        mol = Chem.MolFromSmiles(smiles)
+
+        if mol:
+            st.image(
+                Draw.MolToImage(mol, size=(500, 350))
+            )
+
+            st.write(
+                "Formula:",
+                rdMolDescriptors.CalcMolFormula(mol)
+            )
+
+            st.write(
+                "MW:",
+                round(Descriptors.MolWt(mol), 4)
+            )
+
+            st.write(
+                "Exact Mass:",
+                round(Descriptors.ExactMolWt(mol), 4)
+            )
+
+        else:
+            st.error("Invalid SMILES")
+
+st.caption("LCMS Assistant v0.5 | Developed by Bowen Wang")
