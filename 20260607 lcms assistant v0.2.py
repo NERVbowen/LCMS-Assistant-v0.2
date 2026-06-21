@@ -21,15 +21,7 @@ st.set_page_config(
     layout="wide"
 )
 
-html("""
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-2SFYEGXTZP"></script>
-<script>
-window.dataLayer = window.dataLayer || [];
-function gtag(){dataLayer.push(arguments);}
-gtag('js', new Date());
-gtag('config', 'G-2SFYEGXTZP');
-</script>
-""", height=0)
+
 
 
 st.title("LCMS Assistant v0.5")
@@ -344,20 +336,91 @@ def smiles_lcms_ion_predictor(smiles, mobile_phase):
         return {"error": f"Could not process SMILES: {str(e)}"}
 
 
-tab1, tab2, tab3, tab4, tab5, tab6  = st.tabs([
-    "Mass Spectra OCR",
-    "Formula Calculator",
-    "Mass Calculator",
-    "UV Estimator",
-    "LC-MS Ion Estimator",
-    "Simple ChemDraw"
+home, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "🏠 Home",
+    "📊 Spectra OCR",
+    "🧬 Formula Calculator",
+    "🌈 UV Predictor",
+    "⚡ LC-MS Predictor",
+    "✏️ ChemDraw Lite",
+    "ℹ️ About"
 ])
 
-with tab1:
-    st.header("Load Your Mass Spectra Here")
+
+with home:
+
+    st.title("UVX Chem")
+
+    st.subheader("Scientific Tools for Chemists")
+
+    st.write(
+        """
+        Free online tools for LC-MS, analytical chemistry,
+        chemical structure analysis, molecular property prediction,
+        and UV characterization.
+        """
+    )
+
+    st.link_button(
+        "🌐 Visit UVXChem.com",
+        "https://uvxchem.com"
+    )
+
+    st.divider()
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("### 📊 OCR Reader")
+        st.write(
+            "Extract numbers from mass spectra images and identify potential m/z relationships."
+        )
+
+    with col2:
+        st.markdown("### 🧬 Formula Calculator")
+        st.write(
+            "Calculate molecular formula properties, molecular weight, and exact mass."
+        )
+
+    with col3:
+        st.markdown("### 🌈 UV Predictor")
+        st.write(
+            "Estimate UV detectability and likely UV response from SMILES structures."
+        )
+
+    col4, col5, col6 = st.columns(3)
+
+    with col4:
+        st.markdown("### ⚡ LC-MS Predictor")
+        st.write(
+            "Predict logP, polarity, and common LC-MS ionization behavior."
+        )
+
+    with col5:
+        st.markdown("### ✏️ ChemDraw Lite")
+        st.write(
+            "Draw chemical structures and calculate formula, exact mass, and common adducts."
+        )
+
+    with col6:
+        st.markdown("### ℹ️ About")
+        st.write(
+            "Free analytical chemistry tools for LC-MS, UV analysis, and molecular property prediction."
+        )
+
+    st.divider()
+
+    st.info(
+        "Select a tool from the tabs above to get started."
+    )
+
+
+
+with tab2:
+    st.header("Mass Spectra OCR + Mass Calculator")
 
     uploaded_file = st.file_uploader(
-        "Upload image",
+        "Upload mass spectra image",
         type=["png", "jpg", "jpeg"]
     )
 
@@ -391,7 +454,7 @@ with tab1:
         except:
             pass
 
-    target_diffs = [5, 17, 22, 36, 38]
+    target_diffs = [5, 17, 18, 22, 23, 36, 38, 44, 59]
     matches = []
 
     for i in range(len(mz_values)):
@@ -399,23 +462,60 @@ with tab1:
             diff = abs(mz_values[j] - mz_values[i])
 
             for target in target_diffs:
-                if round(diff) == target:
+                if abs(diff - target) <= 0.5:
                     matches.append(
                         (mz_values[i], mz_values[j], round(diff, 4), target)
                     )
 
-    st.subheader("Potential Relationships")
+    st.subheader("Potential m/z Relationships")
 
     if matches:
         for m1, m2, diff, target in matches:
             st.write(
-                f"{m1:.4f} ↔ {m2:.4f} | Δ={diff:.4f} | Match={target}"
+                f"{m1:.4f} ↔ {m2:.4f} | Δ={diff:.4f} | Match≈{target}"
             )
     else:
         st.write("No matches found")
 
+    st.divider()
 
-with tab2:
+    st.subheader("Mass / Adduct Calculator")
+
+    neutral_mass = st.number_input(
+        "Neutral exact mass",
+        min_value=0.0,
+        value=100.0000,
+        format="%.6f"
+    )
+
+    positive_adducts = {
+        "[M+H]+": 1.007276,
+        "[M+Na]+": 22.989218,
+        "[M+K]+": 38.963158,
+        "[M+NH4]+": 18.033823,
+    }
+
+    negative_adducts = {
+        "[M-H]-": -1.007276,
+        "[M+Cl]-": 34.969402,
+        "[M+FA-H]-": 44.998201,
+        "[M+Ac-H]-": 59.013851,
+    }
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**Positive Mode**")
+        for adduct, shift in positive_adducts.items():
+            st.write(f"{adduct}: {neutral_mass + shift:.4f}")
+
+    with col2:
+        st.markdown("**Negative Mode**")
+        for adduct, shift in negative_adducts.items():
+            st.write(f"{adduct}: {neutral_mass + shift:.4f}")
+
+
+with tab3:
     st.header("Formula → Adduct Calculator")
 
     formula = st.text_input("Molecular Formula", "C8H10N4O2")
@@ -444,31 +544,6 @@ with tab2:
         except Exception:
             st.error("Invalid formula")
 
-
-with tab3:
-    st.header("Neutral Mass → Adduct Calculator")
-
-    mass = st.number_input(
-        "Enter Neutral Mass",
-        min_value=0.0,
-        value=194.08038,
-        format="%.5f"
-    )
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("Positive Mode")
-        st.write(f"[M+H]+ = {mass + 1.00783:.5f}")
-        st.write(f"[M+NH4]+ = {mass + 18.03437:.5f}")
-        st.write(f"[M+Na]+ = {mass + 22.98922:.5f}")
-        st.write(f"[M+K]+ = {mass + 38.96316:.5f}")
-
-    with col2:
-        st.subheader("Negative Mode")
-        st.write(f"[M-H]- = {mass - 1.00783:.5f}")
-        st.write(f"[M+Cl]- = {mass + 34.96885:.5f}")
-        st.write(f"[M+Ac-H]- = {mass + 59.01385:.5f}")
 
 with tab4:
     st.header("SMILES UV Detectability Estimator")
@@ -618,13 +693,9 @@ with tab6:
     from rdkit.Chem import Descriptors, rdMolDescriptors
 
     st.title("ChemDraw Lite")
-
     st.subheader("Import SMILES")
 
-    input_smiles = st.text_input(
-        "Paste SMILES",
-        value=""
-    )
+    input_smiles = st.text_input("Paste SMILES", value="")
 
     if input_smiles:
         smiles = input_smiles
@@ -638,23 +709,76 @@ with tab6:
         mol = Chem.MolFromSmiles(smiles)
 
         if mol:
+            formula = rdMolDescriptors.CalcMolFormula(mol)
+            mw = Descriptors.MolWt(mol)
+            exact_mass = Descriptors.ExactMolWt(mol)
 
-            st.write(
-                "Formula:",
-                rdMolDescriptors.CalcMolFormula(mol)
-            )
+            st.write("Formula:", formula)
+            st.write("MW:", round(mw, 4))
+            st.write("Exact Mass:", round(exact_mass, 4))
 
-            st.write(
-                "MW:",
-                round(Descriptors.MolWt(mol), 4)
-            )
+            st.subheader("Common LC-MS Adducts")
 
-            st.write(
-                "Exact Mass:",
-                round(Descriptors.ExactMolWt(mol), 4)
-            )
+            positive_adducts = {
+                "[M+H]+": 1.007276,
+                "[M+Na]+": 22.989218,
+                "[M+K]+": 38.963158,
+                "[M+NH4]+": 18.033823,
+            }
+
+            negative_adducts = {
+                "[M-H]-": -1.007276,
+                "[M+Cl]-": 34.969402,
+                "[M+FA-H]-": 44.998201,
+                "[M+Ac-H]-": 59.013851,
+            }
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("**Positive Mode**")
+                for adduct, mass_shift in positive_adducts.items():
+                    st.write(f"{adduct}: {exact_mass + mass_shift:.4f}")
+
+            with col2:
+                st.markdown("**Negative Mode**")
+                for adduct, mass_shift in negative_adducts.items():
+                    st.write(f"{adduct}: {exact_mass + mass_shift:.4f}")
 
         else:
             st.error("Invalid SMILES")
+
+
+
+with tab7:
+
+    st.title("About UVX Chem")
+
+    st.write("""
+    UVX Chem is a collection of free online tools
+    designed for chemists, analytical scientists,
+    and LC-MS users.
+
+    Current tools include:
+
+    • Spectra OCR
+
+    • Formula Calculator
+
+    • UV Predictor
+
+    • LC-MS Predictor
+
+    • ChemDraw Lite
+
+    """)
+
+
+    st.link_button(
+        "🌐 UVXChem.com",
+        "https://uvxchem.com"
+    )
+
+
 
 st.caption("LCMS Assistant v0.5 | Developed by Bowen Wang")
