@@ -2,6 +2,7 @@ streamlit
 molmass
 easyocr
 numpy
+pandas
 pillow
-rdkit==2024.9.6
+rdkit-pypi==2022.9.5
 streamlit-ketcher
