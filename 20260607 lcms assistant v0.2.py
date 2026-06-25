@@ -24,7 +24,7 @@ st.set_page_config(
 
 
 
-st.title("LCMS Assistant v0.5")
+st.title("LCMS Assistant v0.6")
 
 
 
@@ -687,35 +687,42 @@ with tab5:
             )
 
 with tab6:
-    import streamlit as st
+
     from streamlit_ketcher import st_ketcher
     from rdkit import Chem
     from rdkit.Chem import Descriptors, rdMolDescriptors
 
-    st.title("ChemDraw Lite")
-    st.subheader("Import SMILES")
+    st.header("ChemDraw Lite")
 
-    input_smiles = st.text_input("Paste SMILES", value="")
+    input_smiles = st.text_input(
+        "Paste SMILES",
+        value=""
+    )
 
-    if input_smiles:
-        smiles = input_smiles
-    else:
-        smiles = st_ketcher("CN1C=NC2=C1C(=O)N(C(=O)N2C)C")
+    default_smiles = (
+        input_smiles
+        if input_smiles
+        else "CN1C=NC2=C1C(=O)N(C(=O)N2C)C"
+    )
 
-    st.write("SMILES:")
+    smiles = st_ketcher(default_smiles)
+
+    st.write("SMILES")
     st.code(smiles)
 
     if smiles:
+
         mol = Chem.MolFromSmiles(smiles)
 
-        if mol:
+        if mol is not None:
+
             formula = rdMolDescriptors.CalcMolFormula(mol)
             mw = Descriptors.MolWt(mol)
             exact_mass = Descriptors.ExactMolWt(mol)
 
-            st.write("Formula:", formula)
-            st.write("MW:", round(mw, 4))
-            st.write("Exact Mass:", round(exact_mass, 4))
+            st.write("**Formula:**", formula)
+            st.write("**MW:**", round(mw, 4))
+            st.write("**Exact Mass:**", round(exact_mass, 4))
 
             st.subheader("Common LC-MS Adducts")
 
@@ -737,13 +744,13 @@ with tab6:
 
             with col1:
                 st.markdown("**Positive Mode**")
-                for adduct, mass_shift in positive_adducts.items():
-                    st.write(f"{adduct}: {exact_mass + mass_shift:.4f}")
+                for adduct, shift in positive_adducts.items():
+                    st.write(f"{adduct}: {exact_mass + shift:.4f}")
 
             with col2:
                 st.markdown("**Negative Mode**")
-                for adduct, mass_shift in negative_adducts.items():
-                    st.write(f"{adduct}: {exact_mass + mass_shift:.4f}")
+                for adduct, shift in negative_adducts.items():
+                    st.write(f"{adduct}: {exact_mass + shift:.4f}")
 
         else:
             st.error("Invalid SMILES")
@@ -781,4 +788,4 @@ with tab7:
 
 
 
-st.caption("LCMS Assistant v0.5 | Developed by Bowen Wang")
+st.caption("LCMS Assistant v0.6 | Developed by Bowen Wang")
