@@ -2,6 +2,9 @@ import re
 import streamlit as st
 from streamlit.components.v1 import html
 from PIL import Image, ImageEnhance
+import itertools
+import pandas as pd
+from collections import Counter
 import easyocr
 import numpy as np
 from molmass import Formula
@@ -343,7 +346,8 @@ home, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🌈 UV Predictor",
     "⚡ LC-MS Predictor",
     "✏️ ChemDraw Lite",
-    "ℹ️ About"
+    "🧩 Oligomer Finder (Beta)",
+    #"ℹ️ About"
 ])
 
 
@@ -401,12 +405,17 @@ with home:
         st.write(
             "Draw chemical structures and calculate formula, exact mass, and common adducts."
         )
-
     with col6:
-        st.markdown("### ℹ️ About")
+        st.markdown("### 🧩 Oligomer Finder(Beta)")
         st.write(
-            "Free analytical chemistry tools for LC-MS, UV analysis, and molecular property prediction."
+            "This tool automatically searches for repeat-unit patterns in the form."
         )
+    # with col6:
+    #     st.markdown("### ℹ️ About")
+    #     st.write(
+    #         "Free analytical chemistry tools for LC-MS, UV analysis, and molecular property prediction."
+    #     )
+
 
     st.divider()
 
@@ -756,36 +765,328 @@ with tab6:
             st.error("Invalid SMILES")
 
 
-
 with tab7:
+    st.header("🧩 Oligomer Pattern Finder")
 
-    st.title("About UVX Chem")
-
-    st.write("""
-    UVX Chem is a collection of free online tools
-    designed for chemists, analytical scientists,
-    and LC-MS users.
-
-    Current tools include:
-
-    • Spectra OCR
-
-    • Formula Calculator
-
-    • UV Predictor
-
-    • LC-MS Predictor
-
-    • ChemDraw Lite
-
-    """)
-
-
-    st.link_button(
-        "🌐 UVXChem.com",
-        "https://uvxchem.com"
+    st.caption(
+        "🚧 **Beta Version** – This feature is still under active development. "
+        "Results are intended for research and screening purposes. "
+        "If you find bugs or have suggestions, please leave a message via "
+        "[**UVX Chem**](https://uvxchem.com)."
     )
 
+    st.write("This tool automatically searches for repeat-unit patterns in the form:")
+    st.latex(r"M = c + n\cdot u_1 + m\cdot u_2")
+
+    mass_text = st.text_area(
+        "Paste monoisotopic masses, one per line",
+        height=250
+    )
+
+    tol = st.number_input("Mass tolerance (Da)", 0.0001, 0.1, 0.005, 0.001, format="%.4f")
+    max_n = st.number_input("Max n", 1, 50, 12)
+    max_m = st.number_input("Max m", 1, 50, 12)
+
+    known_units = {
+        "H2O / H.OH end group": 18.01056468,
+        "CH2": 14.01565006,
+        "C2H4": 28.03130013,
+        "C2H4O / EO / PEG unit": 44.02621475,
+        "C4H8": 56.06260026,
+        "C3H6O / PO unit": 58.04186481,
+        "C6H4": 76.03130013,
+        "C6H4O": 92.02621475,
+        "C8H8 / styrene unit": 104.06260026,
+        "Na-H adduct shift": 21.981943,
+        "K-H adduct shift": 37.955882,
+    }
+
+    def parse_masses(text):
+        values = []
+        for line in text.replace(",", "\n").splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    values.append(float(line))
+                except:
+                    pass
+        return sorted(values)
+
+    def unit_guess(x):
+        hits = []
+        for name, exact in known_units.items():
+            err = abs(x - exact)
+            if err <= 0.15:
+                hits.append((name, exact, err))
+        return sorted(hits, key=lambda z: z[2])[:3]
+
+    def get_candidate_units(masses):
+        diffs = []
+        for a, b in itertools.combinations(masses, 2):
+            d = abs(b - a)
+            if 10 <= d <= 250:
+                diffs.append(round(d, 3))
+
+        common = Counter(diffs).most_common(8)
+        units = [x[0] for x in common]
+
+        units += [
+            14.01565006,
+            28.03130013,
+            44.02621475,
+            56.06260026,
+            58.04186481,
+            76.03130013,
+            92.02621475,
+            104.06260026,
+        ]
+
+        clean = []
+        for u in sorted(units):
+            if not any(abs(u - old) < 0.02 for old in clean):
+                clean.append(u)
+
+        return clean
+
+    def fit_one_model(masses, c, u1, u2, tol, max_n, max_m):
+        matched = []
+        unmatched = []
+
+        lattice = []
+        for n in range(int(max_n) + 1):
+            for m in range(int(max_m) + 1):
+                calc = c + n * u1 + m * u2
+                lattice.append((calc, n, m))
+
+        for mass in masses:
+            best_calc, best_n, best_m = min(
+                lattice,
+                key=lambda x: abs(mass - x[0])
+            )
+
+            err = mass - best_calc
+
+            if abs(err) <= tol:
+                matched.append({
+                    "Observed Mass": mass,
+                    "Calculated Mass": best_calc,
+                    "Error": err,
+                    "n": best_n,
+                    "m": best_m
+                })
+            else:
+                unmatched.append(mass)
+
+        coverage = len(matched) / len(masses) if masses else 0
+        avg_error = sum(abs(x["Error"]) for x in matched) / len(matched) if matched else 999
+
+        known_bonus = 0
+        for u in [u1, u2]:
+            if unit_guess(u):
+                known_bonus += 0.03
+
+        score = coverage - avg_error * 10 + known_bonus
+
+        return {
+            "c": c,
+            "u1": u1,
+            "u2": u2,
+            "matched": matched,
+            "unmatched": unmatched,
+            "coverage": coverage,
+            "avg_error": avg_error,
+            "score": score
+        }
+
+
+    def find_patterns(masses, tol, max_n, max_m):
+        candidate_c = [
+            min(masses),
+            18.01056468,
+        ]
+
+        units = get_candidate_units(masses)
+        unit_pairs = list(itertools.combinations(units, 2))
+
+        total = len(candidate_c) * len(unit_pairs)
+        current = 0
+
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+
+        results = []
+
+        for c in candidate_c:
+            for u1, u2 in unit_pairs:
+                current += 1
+
+                progress_bar.progress(current / total)
+                status_text.write(
+                    f"Testing model {current}/{total}: "
+                    f"c={c:.3f}, u1={u1:.3f}, u2={u2:.3f}"
+                )
+
+                r = fit_one_model(masses, c, u1, u2, tol, max_n, max_m)
+
+                if r["coverage"] >= 0.3:
+                    results.append(r)
+
+        progress_bar.empty()
+        status_text.empty()
+
+        results = sorted(results, key=lambda x: x["score"], reverse=True)
+
+        unique = []
+        for r in results:
+            duplicate = False
+            for old in unique:
+                same_c = abs(r["c"] - old["c"]) < 0.02
+                same_units = (
+                                     abs(r["u1"] - old["u1"]) < 0.02 and abs(r["u2"] - old["u2"]) < 0.02
+                             ) or (
+                                     abs(r["u1"] - old["u2"]) < 0.02 and abs(r["u2"] - old["u1"]) < 0.02
+                             )
+
+                if same_c and same_units:
+                    duplicate = True
+                    break
+
+            if not duplicate:
+                unique.append(r)
+
+        return unique
+
+
+    def unit_formula(unit_mass):
+        guesses = unit_guess(unit_mass)
+
+        if not guesses:
+            return f"{unit_mass:.4f}"
+
+        name = guesses[0][0]
+
+        mapping = {
+            "CH2": "CH2",
+            "C2H4": "C2H4",
+            "C2H4O / EO / PEG unit": "C2H4O",
+            "C3H6O / PO unit": "C3H6O",
+            "C4H8": "C4H8",
+            "C6H4": "C6H4",
+            "C6H4O": "C6H4O",
+            "C8H8 / styrene unit": "C8H8",
+        }
+
+        return mapping.get(name, name)
+
+    def show_pattern(r, rank, total_count):
+        st.subheader(f"Pattern {rank}")
+
+        st.success(
+            f"M = {r['c']:.6f} + n × {r['u1']:.6f} + m × {r['u2']:.6f}"
+        )
+
+        st.write(f"Matched: {len(r['matched'])} / {total_count}")
+        st.write(f"Coverage: {r['coverage'] * 100:.1f}%")
+        st.write(f"Average absolute error: {r['avg_error']:.6f} Da")
+
+        if abs(r["u2"] - 2 * r["u1"]) < 0.03:
+            st.info("Note: unit 2 is approximately 2 × unit 1.")
+        if abs(r["u1"] - 2 * r["u2"]) < 0.03:
+            st.info("Note: unit 1 is approximately 2 × unit 2.")
+
+        st.write("Possible chemical meaning:")
+
+        for label, value in [
+            ("Constant c", r["c"]),
+            ("Unit 1", r["u1"]),
+            ("Unit 2", r["u2"]),
+        ]:
+            st.write(f"**{label}: {value:.6f}**")
+            guesses = unit_guess(value)
+            if guesses:
+                for name, exact, err in guesses:
+                    st.write(f"- {name} | exact {exact:.6f} | error {err:.6f}")
+            else:
+                st.write("- No close match in small library")
+
+        matched_df = pd.DataFrame(r["matched"])
+
+        st.write("Matched mass assignment:")
+        st.dataframe(matched_df, use_container_width=True)
+
+        if r["unmatched"]:
+            st.write("Unmatched masses:")
+            st.dataframe(
+                pd.DataFrame({"Unmatched Mass": r["unmatched"]}),
+                use_container_width=True
+            )
+
+        st.write("2D lattice map:")
+
+        plot_df = matched_df.copy()
+
+        st.info(
+            "How to read this map: each dot is one matched mass. "
+            "The x-axis is n, the number of unit 1 repeats. "
+            "The y-axis is m, the number of unit 2 repeats. "
+            "A straight row or column means a regular oligomer series."
+        )
+
+
+
+        st.scatter_chart(
+            data=plot_df,
+            x="n",
+            y="m",
+            use_container_width=True
+        )
+
+        st.caption("Each point represents one matched oligomer. Coordinates are (n, m).")
+
+    if st.button("Find Patterns"):
+        masses = parse_masses(mass_text)
+
+        if len(masses) < 5:
+            st.warning("Please paste at least 5 masses.")
+        else:
+            with st.spinner("Searching repeat-unit patterns..."):
+                results = find_patterns(masses, tol, max_n, max_m)
+
+            if not results:
+                st.error("No clear pattern found.")
+            else:
+                st.header("Results")
+
+                show_pattern(results[0], 1, len(masses))
+
+                if len(results) > 1:
+                    show_pattern(results[1], 2, len(masses))
+
+                st.subheader("Top Alternative Patterns")
+                st.write("Find patterns in the form:")
+                st.latex(r"M = c + n \cdot u_1 + m \cdot u_2")
+
+                alt = []
+
+                for i, r in enumerate(results[:10], start=1):
+                    u1_formula = unit_formula(r["u1"])
+                    u2_formula = unit_formula(r["u2"])
+
+                    formula = f"H.({u1_formula})n.({u2_formula})m.OH"
+
+                    alt.append({
+                        "Rank": i,
+                        "Formula": formula,
+                        "c": round(r["c"], 6),
+                        "u1": round(r["u1"], 6),
+                        "u2": round(r["u2"], 6),
+                        "Coverage %": round(r["coverage"] * 100, 1),
+                        "Matched": len(r["matched"]),
+                        "Unmatched": len(r["unmatched"]),
+                        "Avg Error": round(r["avg_error"], 6)
+                    })
+
+                st.dataframe(pd.DataFrame(alt), use_container_width=True)
 
 
 st.caption("LCMS Assistant v0.6 | Developed by Bowen Wang")
