@@ -8,6 +8,8 @@ from collections import Counter
 import easyocr
 import numpy as np
 from molmass import Formula
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 
 from rdkit import Chem
 from rdkit.Chem import (
@@ -16,6 +18,8 @@ from rdkit.Chem import (
     Crippen,
     Lipinski
 )
+
+import pandas as pd
 
 
 st.set_page_config(
@@ -27,7 +31,7 @@ st.set_page_config(
 
 
 
-st.title("LCMS Assistant v0.6")
+st.title("LCMS Assistant v0.7")
 
 
 
@@ -338,16 +342,373 @@ def smiles_lcms_ion_predictor(smiles, mobile_phase):
     except Exception as e:
         return {"error": f"Could not process SMILES: {str(e)}"}
 
+def get_solvent_score(smiles, solvent):
+    result, error = predict_solvent_compatibility(smiles)
+    if error:
+        return None
 
-home, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    df = result["table"]
+    row = df[df["Solvent"] == solvent]
+
+    if row.empty:
+        return None
+
+    return float(row.iloc[0]["Compatibility Score (0–100)"])
+
+
+def estimate_pseudo_partition(score_a, score_b):
+    delta = score_a - score_b
+    pseudo_logK = delta / 20
+    K = 10 ** pseudo_logK
+
+    percent_a = round((K / (1 + K)) * 100, 1)
+    percent_b = round(100 - percent_a, 1)
+
+    return percent_a, percent_b
+
+
+def run_two_solvent_partition(smiles_list, solvent_a, solvent_b):
+    results = []
+
+    for i, smi in enumerate(smiles_list, start=1):
+        mol = Chem.MolFromSmiles(smi)
+        if mol is None:
+            continue
+
+        score_a = get_solvent_score(smi, solvent_a)
+        score_b = get_solvent_score(smi, solvent_b)
+
+        if score_a is None or score_b is None:
+            continue
+
+        percent_a, percent_b = estimate_pseudo_partition(score_a, score_b)
+
+        results.append({
+            "Compound": f"C{i}",
+            "SMILES": smi,
+            f"{solvent_a} Score": score_a,
+            f"{solvent_b} Score": score_b,
+            f"{solvent_a} %": percent_a,
+            f"{solvent_b} %": percent_b,
+            "Preferred Layer": solvent_a if percent_a >= percent_b else solvent_b
+        })
+
+    return pd.DataFrame(results)
+
+from matplotlib.patches import Rectangle
+
+def plot_separatory_funnel(df, solvent_a, solvent_b):
+    d_a = SOLVENT_LAYER_INFO[solvent_a]["density"]
+    d_b = SOLVENT_LAYER_INFO[solvent_b]["density"]
+
+    if d_a > d_b:
+        bottom_solvent = solvent_a
+        top_solvent = solvent_b
+    else:
+        bottom_solvent = solvent_b
+        top_solvent = solvent_a
+
+    fig, ax = plt.subplots(figsize=(5.2, 4.0))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 8)
+    ax.axis("off")
+
+    colors = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple"]
+
+    ax.add_patch(Rectangle((1.2, 1.0), 7.6, 5.6, fill=False, linewidth=1.6))
+    ax.add_patch(Rectangle((1.2, 3.8), 7.6, 2.8, alpha=0.18))
+    ax.add_patch(Rectangle((1.2, 1.0), 7.6, 2.8, alpha=0.35))
+    ax.plot([1.2, 8.8], [3.8, 3.8], color="black", linewidth=1.3)
+
+    ax.text(5, 7.35, f"{top_solvent} / {bottom_solvent}",
+            ha="center", va="center", fontsize=12, weight="bold")
+
+    ax.text(5, 4.5, f"Top: {top_solvent}",
+            ha="center", va="center", fontsize=10, weight="bold")
+
+    ax.text(5, 1.45, f"Bottom: {bottom_solvent}",
+            ha="center", va="center", fontsize=10, weight="bold")
+
+    x_positions = [2.0, 3.5, 5.0, 6.5, 8.0]
+
+    for idx, (_, row) in enumerate(df.iterrows()):
+        if idx >= 5:
+            break
+
+        x = x_positions[idx]
+        color = colors[idx % len(colors)]
+
+        name = str(row["Compound"])
+        if len(name) > 10:
+            name = name[:10] + "..."
+
+        top_pct = float(row[f"{top_solvent} %"])
+        bottom_pct = float(row[f"{bottom_solvent} %"])
+
+        alpha_top = max(top_pct / 100, 0.15)
+        alpha_bottom = max(bottom_pct / 100, 0.15)
+
+        ax.scatter(x, 5.35, s=35 + top_pct * 1.2,
+                   color=color, alpha=alpha_top,
+                   edgecolors="black", linewidth=0.5, zorder=3)
+
+        ax.text(x, 5.75, f"{name}\n{top_pct:.1f}%",
+                ha="center", va="bottom", fontsize=7)
+
+        ax.scatter(x, 2.45, s=35 + bottom_pct * 1.2,
+                   color=color, alpha=alpha_bottom,
+                   edgecolors="black", linewidth=0.5, zorder=3)
+
+        ax.text(x, 2.85, f"{name}\n{bottom_pct:.1f}%",
+                ha="center", va="bottom", fontsize=7)
+
+    return fig
+
+SOLVENT_LAYER_INFO = {
+    "Water": {"density": 1.00, "miscible": ["MeOH", "EtOH", "ACN", "IPA", "Acetone", "DMSO", "DMF", "THF"]},
+    "MeOH": {"density": 0.79, "miscible": ["Water", "EtOH", "ACN", "IPA", "Acetone", "DMSO", "DMF", "THF"]},
+    "EtOH": {"density": 0.79, "miscible": ["Water", "MeOH", "ACN", "IPA", "Acetone", "DMSO", "DMF", "THF"]},
+    "ACN": {"density": 0.79, "miscible": ["Water", "MeOH", "EtOH", "IPA", "Acetone", "DMSO", "DMF"]},
+    "IPA": {"density": 0.79, "miscible": ["Water", "MeOH", "EtOH", "ACN", "Acetone", "DMSO", "DMF"]},
+    "Acetone": {"density": 0.79, "miscible": ["Water", "MeOH", "EtOH", "ACN", "IPA", "DMSO", "DMF"]},
+    "DMSO": {"density": 1.10, "miscible": ["Water", "MeOH", "EtOH", "ACN", "IPA", "Acetone", "DMF"]},
+    "DMF": {"density": 0.94, "miscible": ["Water", "MeOH", "EtOH", "ACN", "IPA", "Acetone", "DMSO"]},
+    "THF": {"density": 0.89, "miscible": ["Water", "MeOH", "EtOH", "IPA"]},
+    "EtOAc": {"density": 0.90, "miscible": []},
+    "DCM": {"density": 1.33, "miscible": []},
+    "Diethyl Ether": {"density": 0.71, "miscible": []},
+    "n-Hexane": {"density": 0.66, "miscible": []},
+}
+
+colors = [
+    "tab:blue",
+    "tab:orange",
+    "tab:green",
+    "tab:red",
+    "tab:purple"
+]
+
+def clamp_score(x):
+    return max(0, min(100, round(x)))
+
+
+def score_to_recommendation(score):
+    if score >= 90:
+        return "Excellent"
+    elif score >= 75:
+        return "Very Good"
+    elif score >= 60:
+        return "Good"
+    elif score >= 40:
+        return "Moderate"
+    elif score >= 20:
+        return "Poor"
+    else:
+        return "Very Poor"
+
+
+def predict_solvent_compatibility(smiles):
+    """
+    Rule-based solvent compatibility estimator.
+    Output is for relative solvent ranking only, not experimental solubility.
+    """
+
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return None, "Invalid SMILES"
+
+    mw = Descriptors.MolWt(mol)
+    logp = Crippen.MolLogP(mol)
+    tpsa = rdMolDescriptors.CalcTPSA(mol)
+    hbd = Lipinski.NumHDonors(mol)
+    hba = Lipinski.NumHAcceptors(mol)
+    rot = Lipinski.NumRotatableBonds(mol)
+    charge = Chem.GetFormalCharge(mol)
+
+    polarity = tpsa + 12 * hbd + 6 * hba + 25 * abs(charge)
+
+    scores = {}
+
+    # Polar protic / aqueous
+    scores["Water"] = (
+        70
+        - 18 * logp
+        + 0.35 * tpsa
+        + 8 * hbd
+        + 5 * hba
+        + 30 * abs(charge)
+        - 0.05 * mw
+    )
+
+    scores["MeOH"] = (
+        78
+        - 8 * abs(logp - 1.2)
+        + 0.12 * tpsa
+        + 5 * hbd
+        + 3 * hba
+        + 12 * abs(charge)
+        - 0.025 * mw
+    )
+
+    scores["EtOH"] = (
+        76
+        - 7 * abs(logp - 1.8)
+        + 0.08 * tpsa
+        + 4 * hbd
+        + 2.5 * hba
+        + 8 * abs(charge)
+        - 0.025 * mw
+    )
+
+    scores["IPA"] = (
+        70
+        - 7 * abs(logp - 2.0)
+        + 0.05 * tpsa
+        + 3 * hbd
+        + 2 * hba
+        - 0.025 * mw
+    )
+
+    # LC-MS organic solvents
+    scores["ACN"] = (
+        72
+        - 7 * abs(logp - 1.5)
+        + 0.06 * tpsa
+        + 2 * hba
+        + 8 * abs(charge)
+        - 0.025 * mw
+    )
+
+    scores["Acetone"] = (
+        70
+        - 6 * abs(logp - 1.8)
+        + 0.04 * tpsa
+        + 2 * hba
+        - 0.025 * mw
+    )
+
+    # Strong organic dissolving solvents
+    scores["DMSO"] = (
+        92
+        - 3 * abs(logp - 2.0)
+        + 0.03 * tpsa
+        + 2 * hbd
+        + 2 * hba
+        + 6 * abs(charge)
+        - 0.015 * mw
+    )
+
+    scores["DMF"] = (
+        88
+        - 4 * abs(logp - 2.0)
+        + 0.03 * tpsa
+        + 2 * hba
+        + 4 * abs(charge)
+        - 0.018 * mw
+    )
+
+    scores["THF"] = (
+        72
+        - 7 * abs(logp - 2.3)
+        + 0.02 * tpsa
+        + 1.5 * hba
+        - 0.022 * mw
+    )
+
+    # Medium/nonpolar organic solvents
+    scores["EtOAc"] = (
+        65
+        - 7 * abs(logp - 2.5)
+        - 0.05 * tpsa
+        + 1.5 * hba
+        - 0.022 * mw
+    )
+
+    scores["DCM"] = (
+        62
+        - 6 * abs(logp - 2.7)
+        - 0.06 * tpsa
+        - 2 * hbd
+        - 0.02 * mw
+    )
+
+    scores["Diethyl Ether"] = (
+        55
+        - 8 * abs(logp - 3.0)
+        - 0.07 * tpsa
+        - 3 * hbd
+        + 1 * hba
+        - 0.02 * mw
+    )
+
+    scores["n-Hexane"] = (
+        45
+        + 10 * logp
+        - 0.20 * tpsa
+        - 8 * hbd
+        - 4 * hba
+        - 25 * abs(charge)
+        - 0.015 * mw
+    )
+
+    rows = []
+    for solvent, raw_score in scores.items():
+        score = clamp_score(raw_score)
+        rows.append({
+            "Solvent": solvent,
+            "Compatibility Score (0–100)": score,
+            "Recommendation": score_to_recommendation(score)
+        })
+
+    df = pd.DataFrame(rows)
+    df = df.sort_values(
+        by="Compatibility Score (0–100)",
+        ascending=False
+    ).reset_index(drop=True)
+
+    best_overall = df.iloc[0]["Solvent"]
+
+    lcms_candidates = df[
+        df["Solvent"].isin(["MeOH", "ACN", "EtOH", "Water"])
+    ].sort_values(
+        by="Compatibility Score (0–100)",
+        ascending=False
+    )
+
+    best_lcms = lcms_candidates.iloc[0]["Solvent"]
+
+    avoid = df[df["Compatibility Score (0–100)"] < 25]["Solvent"].tolist()
+
+    summary = {
+        "Best Stock Solution": best_overall,
+        "Best LC-MS Compatible": best_lcms,
+        "Recommended Injection Solvent": f"{best_lcms}/Water or Water/{best_lcms}",
+        "Avoid": ", ".join(avoid) if avoid else "None"
+    }
+
+    return {
+        "descriptors": {
+            "MW": round(mw, 2),
+            "logP": round(logp, 2),
+            "TPSA": round(tpsa, 2),
+            "HBD": hbd,
+            "HBA": hba,
+            "Rotatable Bonds": rot,
+            "Formal Charge": charge
+        },
+        "summary": summary,
+        "table": df
+    }, None
+
+home, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "🏠 Home",
     "📊 Spectra OCR",
     "🧬 Formula Calculator",
     "🌈 UV Predictor",
     "⚡ LC-MS Predictor",
-    "✏️ ChemDraw Lite",
+    "✏ ChemDraw Lite",
     "🧩 Oligomer Finder (Beta)",
-    #"ℹ️ About"
+    "🧪 Solvent Compatibility",
 ])
 
 
@@ -372,7 +733,8 @@ with home:
 
     st.divider()
 
-    col1, col2, col3 = st.columns(3)
+    # First row
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.markdown("### 📊 OCR Reader")
@@ -392,23 +754,31 @@ with home:
             "Estimate UV detectability and likely UV response from SMILES structures."
         )
 
-    col4, col5, col6 = st.columns(3)
-
     with col4:
         st.markdown("### ⚡ LC-MS Predictor")
         st.write(
             "Predict logP, polarity, and common LC-MS ionization behavior."
         )
 
+    # Second row
+    col5, col6, col7 = st.columns(3)
+
     with col5:
         st.markdown("### ✏️ ChemDraw Lite")
         st.write(
             "Draw chemical structures and calculate formula, exact mass, and common adducts."
         )
+
     with col6:
-        st.markdown("### 🧩 Oligomer Finder(Beta)")
+        st.markdown("### 🧩 Oligomer Finder (Beta)")
         st.write(
-            "This tool automatically searches for repeat-unit patterns in the form."
+            "Automatically search for repeat-unit patterns from measured masses."
+        )
+
+    with col7:
+        st.markdown("### 🧪 Solvent Compatibility")
+        st.write(
+            "Estimate solvent compatibility from SMILES and simulate two-solvent liquid–liquid extraction."
         )
     # with col6:
     #     st.markdown("### ℹ️ About")
@@ -1088,5 +1458,175 @@ with tab7:
 
                 st.dataframe(pd.DataFrame(alt), use_container_width=True)
 
+with tab8:
 
-st.caption("LCMS Assistant v0.6 | Developed by Bowen Wang")
+    st.header("🧪 Solvent Compatibility Estimator")
+
+    smiles = st.text_input(
+        "Enter SMILES",
+        key="solvent_smiles"
+    )
+
+    if st.button("Estimate Solvent Compatibility"):
+
+        result, error = predict_solvent_compatibility(smiles)
+
+        if error:
+            st.error(error)
+
+        else:
+            st.subheader("📊 Solvent Compatibility")
+
+            st.dataframe(
+                result["table"],
+                use_container_width=True,
+                hide_index=True
+            )
+
+            st.caption(
+                "Compatibility Score (0–100) is a rule-based estimate for relative solvent suitability. "
+                "It is intended to rank common laboratory solvents and does not represent experimental solubility."
+            )
+    # ==========================================================
+    # Two-Solvent Extraction Simulator
+    # ==========================================================
+
+    st.markdown("---")
+    st.subheader("🧪 Two-Solvent Extraction Simulator")
+
+
+    st.write("Enter up to five compounds:")
+
+    df_input = pd.DataFrame({
+        "Compound Name": [
+            "Aspirin",
+            "Caffeine",
+            "Cholesterol",
+            "",
+            ""
+        ],
+        "SMILES": [
+            "CC(=O)OC1=CC=CC=C1C(=O)O",
+            "Cn1cnc2n(C)c(=O)n(C)c(=O)c12",
+            "CC(C)CCCC(C)C1CCC2C3CCC4=CC(O)CCC4(C)C3CCC12C",
+            "",
+            ""
+        ]
+    })
+
+    edited_df = st.data_editor(
+        df_input,
+        hide_index=True,
+        use_container_width=True,
+        disabled=False
+    )
+
+    solvent_list = [
+        "Water",
+        "MeOH",
+        "EtOH",
+        "ACN",
+        "IPA",
+        "Acetone",
+        "DMSO",
+        "DMF",
+        "THF",
+        "EtOAc",
+        "DCM",
+        "Diethyl Ether",
+        "n-Hexane"
+    ]
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        solvent_a = st.selectbox(
+            "Solvent 1",
+            solvent_list,
+            index=0,
+            key="partition_solvent1"
+        )
+
+    with c2:
+        solvent_b = st.selectbox(
+            "Solvent 2",
+            solvent_list,
+            index=10,
+            key="partition_solvent2"
+        )
+
+    if st.button("Simulate Extraction"):
+
+        if solvent_a == solvent_b:
+            st.error("Please choose two different solvents.")
+
+        else:
+
+            # Check miscibility
+            if solvent_b in SOLVENT_LAYER_INFO[solvent_a]["miscible"]:
+                st.warning(
+                    f"{solvent_a} and {solvent_b} are completely miscible. "
+                    "Two liquid layers will not form."
+                )
+
+            compound_list = []
+
+            for _, row in edited_df.iterrows():
+
+                smiles = str(row["SMILES"]).strip()
+
+                if smiles == "":
+                    continue
+
+                name = str(row["Compound Name"]).strip()
+
+                if name == "":
+                    name = f"Compound {len(compound_list) + 1}"
+
+                compound_list.append({
+                    "Name": name,
+                    "SMILES": smiles
+                })
+
+            if len(compound_list) == 0:
+                st.error("Please enter at least one SMILES.")
+
+            else:
+                df_partition = run_two_solvent_partition(
+                    [c["SMILES"] for c in compound_list],
+                    solvent_a,
+                    solvent_b
+                )
+
+                df_partition["Compound"] = [
+                    c["Name"] for c in compound_list
+                ]
+
+                st.subheader("Partition Prediction")
+
+                st.dataframe(
+                    df_partition,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                if solvent_b not in SOLVENT_LAYER_INFO[solvent_a]["miscible"]:
+                    st.subheader("Extraction Vial")
+
+                    fig = plot_separatory_funnel(
+                        df_partition,
+                        solvent_a,
+                        solvent_b
+                    )
+
+                    st.pyplot(fig)
+
+                st.caption(
+                    "Layer percentages are estimated using a pseudo-partition model derived from "
+                    "relative solvent compatibility scores. They are intended for visualization only "
+                    "and are not experimental partition coefficients (logP or logD)."
+                )
+
+
+
+st.caption("LCMS Assistant v0.7 | Developed by Bowen Wang")
