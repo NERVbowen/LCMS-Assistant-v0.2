@@ -356,15 +356,89 @@ def get_solvent_score(smiles, solvent):
     return float(row.iloc[0]["Compatibility Score (0–100)"])
 
 
-def estimate_pseudo_partition(score_a, score_b):
-    delta = score_a - score_b
-    pseudo_logK = delta / 20
-    K = 10 ** pseudo_logK
+def estimate_partition_from_smiles(smiles, solvent_a, solvent_b):
+    mol = Chem.MolFromSmiles(smiles)
+    special_bonus = 0
 
-    percent_a = round((K / (1 + K)) * 100, 1)
-    percent_b = round(100 - percent_a, 1)
+    for pattern_name, pattern_info in SPECIAL_EXTRACTION_PATTERNS.items():
+        patt = Chem.MolFromSmarts(pattern_info["smarts"])
 
-    return percent_a, percent_b
+        if patt is not None and mol.HasSubstructMatch(patt):
+            special_bonus += pattern_info["organic_bonus"]
+    if mol is None:
+        return None, None
+
+    logp = Crippen.MolLogP(mol)
+    tpsa = rdMolDescriptors.CalcTPSA(mol)
+    hbd = Lipinski.NumHDonors(mol)
+    hba = Lipinski.NumHAcceptors(mol)
+    charge = Chem.GetFormalCharge(mol)
+
+    d_a = SOLVENT_LAYER_INFO[solvent_a]["density"]
+    d_b = SOLVENT_LAYER_INFO[solvent_b]["density"]
+
+    if d_a > d_b:
+        organic_solvent = solvent_a
+        aqueous_solvent = solvent_b
+    else:
+        organic_solvent = solvent_b
+        aqueous_solvent = solvent_a
+
+    organic_bonus = {
+        "DCM": 0.7,
+        "EtOAc": 0.4,
+        "Diethyl Ether": 0.3,
+        "n-Hexane": 1.0
+    }.get(organic_solvent, 0.2)
+
+    brine_bonus = 0.4 if aqueous_solvent == "Brine (Sat. NaCl)" else 0
+
+    pseudo_logD = (
+            0.9 * logp
+            - 0.015 * tpsa
+            - 0.25 * hbd
+            - 0.08 * hba
+            - 2.5 * abs(charge)
+            + organic_bonus
+            + brine_bonus
+            + special_bonus * 2.0
+    )
+    K = 10 ** pseudo_logD
+    organic_percent = round(K / (1 + K) * 100, 1)
+    aqueous_percent = round(100 - organic_percent, 1)
+
+    if organic_solvent == solvent_a:
+        return organic_percent, aqueous_percent
+    else:
+        return aqueous_percent, organic_percent
+
+
+def run_two_solvent_partition(smiles_list, solvent_a, solvent_b):
+    results = []
+
+    for i, smi in enumerate(smiles_list, start=1):
+        mol = Chem.MolFromSmiles(smi)
+        if mol is None:
+            continue
+
+        percent_a, percent_b = estimate_partition_from_smiles(
+            smi,
+            solvent_a,
+            solvent_b
+        )
+
+        if percent_a is None or percent_b is None:
+            continue
+
+        results.append({
+            "Compound": f"C{i}",
+            "SMILES": smi,
+            f"{solvent_a} %": percent_a,
+            f"{solvent_b} %": percent_b,
+            "Preferred Layer": solvent_a if percent_a >= percent_b else solvent_b
+        })
+
+    return pd.DataFrame(results)
 
 
 def run_two_solvent_partition(smiles_list, solvent_a, solvent_b):
@@ -381,7 +455,11 @@ def run_two_solvent_partition(smiles_list, solvent_a, solvent_b):
         if score_a is None or score_b is None:
             continue
 
-        percent_a, percent_b = estimate_pseudo_partition(score_a, score_b)
+        percent_a, percent_b = estimate_partition_from_smiles(
+            smi,
+            solvent_a,
+            solvent_b
+        )
 
         results.append({
             "Compound": f"C{i}",
@@ -465,7 +543,7 @@ def plot_separatory_funnel(df, solvent_a, solvent_b):
     return fig
 
 SOLVENT_LAYER_INFO = {
-    "Water": {"density": 1.00, "miscible": ["MeOH", "EtOH", "ACN", "IPA", "Acetone", "DMSO", "DMF", "THF"]},
+    "Water": {"density": 1.00, "miscible": ["Brine (Sat. NaCl)", "MeOH", "EtOH", "ACN", "IPA", "Acetone", "DMSO", "DMF", "THF"]},
     "MeOH": {"density": 0.79, "miscible": ["Water", "EtOH", "ACN", "IPA", "Acetone", "DMSO", "DMF", "THF"]},
     "EtOH": {"density": 0.79, "miscible": ["Water", "MeOH", "ACN", "IPA", "Acetone", "DMSO", "DMF", "THF"]},
     "ACN": {"density": 0.79, "miscible": ["Water", "MeOH", "EtOH", "IPA", "Acetone", "DMSO", "DMF"]},
@@ -478,6 +556,7 @@ SOLVENT_LAYER_INFO = {
     "DCM": {"density": 1.33, "miscible": []},
     "Diethyl Ether": {"density": 0.71, "miscible": []},
     "n-Hexane": {"density": 0.66, "miscible": []},
+    "Brine (Sat. NaCl)": {"density": 1.20, "miscible": ["Water", "MeOH", "EtOH", "ACN", "IPA", "Acetone", "DMSO", "DMF"]},
 }
 
 colors = [
@@ -487,6 +566,25 @@ colors = [
     "tab:red",
     "tab:purple"
 ]
+
+SPECIAL_EXTRACTION_PATTERNS = {
+    "Purine / xanthine-like": {
+        "smarts": "c1ncnc2ncnc12",
+        "organic_bonus": 1.6
+    },
+    "Pyridine-like": {
+        "smarts": "n1ccccc1",
+        "organic_bonus": 0.3
+    },
+    "Imidazole-like": {
+        "smarts": "n1cc[nH]c1",
+        "organic_bonus": 0.4
+    },
+    "Triazine-like": {
+        "smarts": "n1cncnc1",
+        "organic_bonus": 0.4
+    },
+}
 
 def clamp_score(x):
     return max(0, min(100, round(x)))
@@ -538,6 +636,13 @@ def predict_solvent_compatibility(smiles):
         + 5 * hba
         + 30 * abs(charge)
         - 0.05 * mw
+    )
+
+    scores["Brine (Sat. NaCl)"] = (
+            scores["Water"]
+            - 10 * logp
+            - 3 * hbd
+            + 5 * abs(charge)
     )
 
     scores["MeOH"] = (
@@ -625,11 +730,12 @@ def predict_solvent_compatibility(smiles):
     )
 
     scores["DCM"] = (
-        62
-        - 6 * abs(logp - 2.7)
-        - 0.06 * tpsa
-        - 2 * hbd
-        - 0.02 * mw
+            65
+            - 5 * abs(logp - 1.2)
+            - 0.06 * tpsa
+            - 2 * hbd
+            - 0.5 * hba
+            - 0.02 * mw
     )
 
     scores["Diethyl Ether"] = (
@@ -1002,8 +1108,8 @@ with tab5:
     st.header("SMILES-Based LC-MS Ionization Estimator")
 
     st.caption(
-        "Rule-based estimate of molecular properties and common LC-MS ions from SMILES. "
-        "This is a screening tool, not an exact ionization prediction."
+        "Layer percentages are estimated using a descriptor-based pseudo-logD model. "
+        "They are intended for visualization only and are not experimental partition coefficients."
     )
 
     smiles = st.text_input(
@@ -1499,17 +1605,17 @@ with tab8:
 
     df_input = pd.DataFrame({
         "Compound Name": [
-            "Aspirin",
+            "BHT",
+            "Dibutyl phthalate",
             "Caffeine",
-            "Cholesterol",
-            "",
+            "ε-Caprolactam",
             ""
         ],
         "SMILES": [
-            "CC(=O)OC1=CC=CC=C1C(=O)O",
+            "CC(C)(C)c1cc(C(C)(C)C)c(O)c(C(C)(C)C)c1",
+            "CCCCOC(=O)c1ccccc1C(=O)OCCCC",
             "Cn1cnc2n(C)c(=O)n(C)c(=O)c12",
-            "CC(C)CCCC(C)C1CCC2C3CCC4=CC(O)CCC4(C)C3CCC12C",
-            "",
+            "O=C1CCCCCN1",
             ""
         ]
     })
@@ -1523,6 +1629,7 @@ with tab8:
 
     solvent_list = [
         "Water",
+        "Brine (Sat. NaCl)",
         "MeOH",
         "EtOH",
         "ACN",
@@ -1551,7 +1658,7 @@ with tab8:
         solvent_b = st.selectbox(
             "Solvent 2",
             solvent_list,
-            index=10,
+            index=11,
             key="partition_solvent2"
         )
 
