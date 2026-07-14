@@ -10,7 +10,6 @@ import numpy as np
 from molmass import Formula
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
-
 from rdkit import Chem
 from rdkit.Chem import (
     Descriptors,
@@ -31,12 +30,30 @@ st.set_page_config(
 
 
 
-st.title("LCMS Assistant v0.7")
-
-
-
+st.title("LCMS Assistant v0.8")
 
 @st.cache_resource
+
+
+
+
+def calculate_dbe(formula_text):
+    counts = {}
+
+    for element, number in re.findall(r"([A-Z][a-z]?)(\d*)", formula_text):
+        counts[element] = counts.get(element, 0) + (
+            int(number) if number else 1
+        )
+
+    c = counts.get("C", 0)
+    h = counts.get("H", 0)
+    n = counts.get("N", 0)
+    x = sum(counts.get(e, 0) for e in ["F", "Cl", "Br", "I"])
+
+    return 1 + c + n / 2 - (h + x) / 2
+
+
+
 def load_reader():
     return easyocr.Reader(["en"])
 
@@ -473,7 +490,7 @@ def run_two_solvent_partition(smiles_list, solvent_a, solvent_b):
 
     return pd.DataFrame(results)
 
-from matplotlib.patches import Rectangle
+
 
 def plot_separatory_funnel(df, solvent_a, solvent_b):
     d_a = SOLVENT_LAYER_INFO[solvent_a]["density"]
@@ -1003,13 +1020,15 @@ with tab2:
 with tab3:
     st.header("Formula → Adduct Calculator")
 
-    formula = st.text_input("Molecular Formula", "C8H10N4O2")
+    formula = st.text_input("Molecular Formdbeula", "C8H10N4O2")
 
     if formula:
         try:
             mw = Formula(formula).isotope.mass
+            dbe = calculate_dbe(formula)
 
             st.success(f"Monoisotopic Mass = {mw:.5f}")
+            st.info(f"DBE = {dbe:.1f}")
 
             col1, col2 = st.columns(2)
 
@@ -1024,7 +1043,9 @@ with tab3:
                 st.subheader("Negative Mode")
                 st.write(f"[M-H]- = {mw - 1.00783:.5f}")
                 st.write(f"[M+Cl]- = {mw + 34.96885:.5f}")
-                st.write(f"[M+Ac-H]- = {mw + 59.01385:.5f}")
+                st.write(f"[M+CH3COO]- = {mw + 59.01385:.5f}")
+                st.write(f"[M+CH3COONa-H]- = {mw + 80.99580:.5f}")
+
 
         except Exception:
             st.error("Invalid formula")
@@ -1736,4 +1757,4 @@ with tab8:
 
 
 
-st.caption("LCMS Assistant v0.7 | Developed by Bowen Wang")
+st.caption("LCMS Assistant v0.8 | Developed by Bowen Wang")
