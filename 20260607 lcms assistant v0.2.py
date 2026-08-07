@@ -1,6 +1,5 @@
 import re
 import streamlit as st
-from streamlit.components.v1 import html
 from PIL import Image, ImageEnhance
 import itertools
 import pandas as pd
@@ -10,15 +9,15 @@ import numpy as np
 from molmass import Formula
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
+from streamlit_ketcher import st_ketcher
 from rdkit import Chem
+
 from rdkit.Chem import (
     Descriptors,
     rdMolDescriptors,
     Crippen,
     Lipinski
 )
-
-import pandas as pd
 
 
 st.set_page_config(
@@ -30,7 +29,7 @@ st.set_page_config(
 
 
 
-st.title("LCMS Assistant v0.8")
+st.title("LCMS Assistant v0.9")
 
 @st.cache_resource
 
@@ -1194,9 +1193,7 @@ with tab5:
 
 with tab6:
 
-    from streamlit_ketcher import st_ketcher
-    from rdkit import Chem
-    from rdkit.Chem import Descriptors, rdMolDescriptors
+
 
     st.header("ChemDraw Lite")
 
@@ -1225,10 +1222,14 @@ with tab6:
             formula = rdMolDescriptors.CalcMolFormula(mol)
             mw = Descriptors.MolWt(mol)
             exact_mass = Descriptors.ExactMolWt(mol)
+            dbe = calculate_dbe(formula)
+
 
             st.write("**Formula:**", formula)
             st.write("**MW:**", round(mw, 4))
             st.write("**Exact Mass:**", round(exact_mass, 4))
+            st.write("**DBE:**", dbe)
+
 
             st.subheader("Common LC-MS Adducts")
 
@@ -1757,4 +1758,4 @@ with tab8:
 
 
 
-st.caption("LCMS Assistant v0.8 | Developed by Bowen Wang")
+st.caption("LCMS Assistant v0.9 | Developed by Bowen Wang")
