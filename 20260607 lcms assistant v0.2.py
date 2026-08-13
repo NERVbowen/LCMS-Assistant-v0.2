@@ -44,12 +44,12 @@ def calculate_dbe(formula_text):
             int(number) if number else 1
         )
 
-    c = counts.get("C", 0)
-    h = counts.get("H", 0)
-    n = counts.get("N", 0)
-    x = sum(counts.get(e, 0) for e in ["F", "Cl", "Br", "I"])
+    tetravalent = sum(counts.get(e, 0) for e in ("C", "Si"))
+    trivalent = sum(counts.get(e, 0) for e in ("N", "P"))
+    hydrogen = counts.get("H", 0)
+    halogens = sum(counts.get(e, 0) for e in ("F", "Cl", "Br", "I"))
 
-    return 1 + c + n / 2 - (h + x) / 2
+    return 1 + tetravalent + trivalent / 2 - (hydrogen + halogens) / 2
 
 
 
